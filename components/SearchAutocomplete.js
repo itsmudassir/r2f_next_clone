@@ -2,14 +2,19 @@
 
 import { useState, useEffect, useRef } from 'react'
 
-export default function SearchAutocomplete({ onSearch }) {
-  const [query, setQuery] = useState('')
+export default function SearchAutocomplete({ onSearch, initialValue = '' }) {
+  const [query, setQuery] = useState(initialValue)
   const [suggestions, setSuggestions] = useState([])
   const [loading, setLoading] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const debounceTimer = useRef(null)
   const inputRef = useRef(null)
+
+  // Update query when initialValue changes
+  useEffect(() => {
+    setQuery(initialValue || '')
+  }, [initialValue])
 
   // Fetch suggestions from API
   const fetchSuggestions = async (searchTerm) => {

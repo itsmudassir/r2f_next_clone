@@ -16,17 +16,28 @@ export default function ProductDetailPage({ params }) {
   const fetchProductDetails = async (productId) => {
     setLoading(true)
     try {
-      // Search for the specific product by ID
-      const response = await fetch(`/api/search?refine_search=${productId}&hitsSize=1&from=0`)
+      // First try to get all products and find by ID
+      const response = await fetch(`/api/search?hitsSize=100&from=0`)
       const result = await response.json()
       
-      if (result.success && result.data?.hits?.hits?.[0]) {
-        const productData = result.data.hits.hits[0]._source?.detail_single || {}
-        setProduct({
-          id: productId,
-          ...productData,
-          images: result.data.hits.hits[0]._source?.images || []
-        })
+      if (result.success && result.data?.hits?.hits) {
+        // Find the product by _id or id_codes
+        const productHit = result.data.hits.hits.find(hit => 
+          hit._id === productId || 
+          hit._source?.detail_single?.id_codes?.toString() === productId ||
+          hit._source?.detail_single?.mpn === productId
+        )
+        
+        if (productHit) {
+          const productData = productHit._source?.detail_single || {}
+          setProduct({
+            id: productId,
+            _id: productHit._id,
+            ...productData,
+            images: productHit._source?.images || [],
+            stores: productHit._source?.stores || []
+          })
+        }
       }
     } catch (error) {
       console.error('Error fetching product:', error)

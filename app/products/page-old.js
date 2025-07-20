@@ -9,20 +9,16 @@ export default function ProductsPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || searchParams.get('refine_search') || '')
-  const [activeFilter, setActiveFilter] = useState(searchParams.get('FilterNav') || 'Refine Search')
+  const [activeFilter, setActiveFilter] = useState('Refine Search')
   const [filterSearch, setFilterSearch] = useState('')
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileFilter, setShowMobileFilter] = useState(false)
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [totalResults, setTotalResults] = useState(0)
-  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('from') || '0') / 20)
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page') || '0'))
   const [pageSize] = useState(20)
-  const [enabledFilters, setEnabledFilters] = useState(
-    searchParams.get('enabled_filters')?.split(',').filter(Boolean) || []
-  )
   const [appliedFilters, setAppliedFilters] = useState({})
-  const [filterOptions, setFilterOptions] = useState({})
 
   useEffect(() => {
     const checkMobile = () => {
@@ -34,51 +30,27 @@ export default function ProductsPage() {
   }, [])
 
   const filterCategories = [
-    { name: 'Availability', param: 'availability' },
-    { name: 'Brands', param: 'brand_name' },
-    { name: 'Categories', param: 'categories' },
-    { name: 'Refine Search', param: 'refine_search' },
-    { name: 'Ratings', param: 'ratings' },
-    { name: 'Reviews', param: 'reviews' },
-    { name: 'Price', param: 'price' },
-    { name: 'Stores', param: 'stores' },
-    { name: 'Attributes', param: 'attributes' },
-    { name: 'Vehicle Application', param: 'vehicle_application' }
+    'Availability',
+    'Brands', 
+    'Categories',
+    'Refine Search',
+    'Ratings',
+    'Reviews',
+    'Price',
+    'Stores',
+    'Attributes',
+    'Vehicle Application'
   ]
 
-  // Build API URL with all parameters
-  const buildApiUrl = () => {
-    const params = new URLSearchParams()
-    
-    // Add search query
-    if (searchQuery) {
-      params.set('refine_search', searchQuery)
-    }
-    
-    // Add enabled filters
-    if (enabledFilters.length > 0) {
-      params.set('enabled_filters', enabledFilters.join(','))
-    }
-    
-    // Add applied filters (e.g., brand_name=dorman)
-    Object.entries(appliedFilters).forEach(([key, value]) => {
-      if (value) {
-        params.set(key, value)
-      }
-    })
-    
-    // Add pagination
-    params.set('hitsSize', pageSize.toString())
-    params.set('from', (currentPage * pageSize).toString())
-    
-    return `/api/search?${params.toString()}`
-  }
-
   // Fetch products from API
-  const fetchProducts = async () => {
+  const fetchProducts = async (search = '', page = 0) => {
     setLoading(true)
     try {
-      const response = await fetch(buildApiUrl())
+      const url = search 
+        ? `/api/search?refine_search=${encodeURIComponent(search)}&hitsSize=${pageSize}&from=${page * pageSize}`
+        : `/api/search?hitsSize=${pageSize}&from=${page * pageSize}`
+      
+      const response = await fetch(url)
       const result = await response.json()
       
       if (result.success && result.data) {
@@ -96,24 +68,6 @@ export default function ProductsPage() {
         }
         setProducts(productData)
         setTotalResults(result.data.hits?.total?.value || result.data.total || result.pagination?.total || productData.length)
-        
-        // Extract filter options from the response
-        if (result.data['attributes bucket']) {
-          const options = {}
-          result.data['attributes bucket'].forEach(item => {
-            const filterParam = item.parent_filter
-            if (filterParam && enabledFilters.includes(filterParam)) {
-              if (!options[filterParam]) {
-                options[filterParam] = []
-              }
-              options[filterParam].push({
-                value: item.label || item.key,
-                count: item.doc_count || 0
-              })
-            }
-          })
-          setFilterOptions(options)
-        }
       } else {
         setProducts([])
         setTotalResults(0)
@@ -128,98 +82,39 @@ export default function ProductsPage() {
   }
 
   // Update URL with current state
-  const updateURL = (updates = {}) => {
-    const newParams = new URLSearchParams()
+  const updateURL = (params) => {
+    const newParams = new URLSearchParams(searchParams)
     
-    // Merge current state with updates
-    const state = {
-      search: searchQuery,
-      FilterNav: activeFilter,
-      enabled_filters: enabledFilters.join(','),
-      from: (currentPage * pageSize).toString(),
-      ...appliedFilters,
-      ...updates
-    }
-    
-    // Add all non-empty parameters to URL
-    Object.entries(state).forEach(([key, value]) => {
-      if (value && value !== '0' && value !== 'Refine Search') {
+    Object.entries(params).forEach(([key, value]) => {
+      if (value) {
         newParams.set(key, value)
+      } else {
+        newParams.delete(key)
       }
     })
     
     router.push(`/products?${newParams.toString()}`)
   }
 
-  // Initialize from URL parameters
+  // Fetch products on mount and when URL changes
   useEffect(() => {
     const search = searchParams.get('search') || searchParams.get('refine_search') || ''
-    const filterNav = searchParams.get('FilterNav') || 'Refine Search'
-    const from = parseInt(searchParams.get('from') || '0')
-    const enabled = searchParams.get('enabled_filters')?.split(',').filter(Boolean) || []
-    
+    const page = parseInt(searchParams.get('page') || '0')
     setSearchQuery(search)
-    setActiveFilter(filterNav)
-    setCurrentPage(Math.floor(from / pageSize))
-    setEnabledFilters(enabled)
-    
-    // Extract applied filters from URL
-    const filters = {}
-    const filterParams = ['brand_name', 'stores', 'availability', 'categories', 'ratings', 'reviews', 'price', 'attributes']
-    searchParams.forEach((value, key) => {
-      if (filterParams.includes(key)) {
-        filters[key] = value
-      }
-    })
-    setAppliedFilters(filters)
+    setCurrentPage(page)
+    fetchProducts(search, page)
   }, [searchParams])
-
-  // Fetch products when parameters change
-  useEffect(() => {
-    fetchProducts()
-  }, [searchQuery, enabledFilters, appliedFilters, currentPage])
-
-  // Handle filter category click
-  const handleFilterClick = (filterParam) => {
-    setActiveFilter(filterParam)
-    
-    // Toggle enabled filters
-    if (filterParam !== 'refine_search') {
-      const newEnabledFilters = enabledFilters.includes(filterParam)
-        ? enabledFilters.filter(f => f !== filterParam)
-        : [...enabledFilters, filterParam]
-      
-      setEnabledFilters(newEnabledFilters)
-      updateURL({ 
-        FilterNav: filterParam,
-        enabled_filters: newEnabledFilters.join(','),
-        from: '0' // Reset pagination
-      })
-    } else {
-      updateURL({ FilterNav: filterParam })
-    }
-  }
 
   // Handle search from autocomplete
   const handleAutocompleteSearch = (query) => {
-    setSearchQuery(query)
-    updateURL({ search: query, from: '0' })
+    updateURL({ search: query, page: '0' })
   }
 
-  // Handle refine search
-  const handleRefineSearch = (e) => {
-    if (e.key === 'Enter' && filterSearch) {
-      setSearchQuery(filterSearch)
-      updateURL({ search: filterSearch, from: '0' })
-      setFilterSearch('')
+  // Handle search from input
+  const handleSearch = (e) => {
+    if (e.key === 'Enter') {
+      updateURL({ search: searchQuery, page: '0' })
     }
-  }
-
-  // Handle pagination
-  const handlePageChange = (newPage) => {
-    setCurrentPage(newPage)
-    updateURL({ from: (newPage * pageSize).toString() })
-    window.scrollTo(0, 0)
   }
 
   return (
@@ -296,7 +191,7 @@ export default function ProductsPage() {
         {/* Filter Container */}
         <div style={{
           display: 'flex',
-          width: isMobile ? '100%' : (activeFilter !== 'Refine Search' ? '560px' : '280px'),
+          width: isMobile ? '100%' : (activeFilter !== null ? '560px' : '280px'),
           backgroundColor: '#f8f8f8',
           borderRight: '1px solid #e0e0e0',
           flexShrink: 0,
@@ -325,25 +220,15 @@ export default function ProductsPage() {
               justifyContent: 'space-between',
               alignItems: 'center'
             }}>
-              <button 
-                onClick={() => {
-                  setAppliedFilters({})
-                  setEnabledFilters([])
-                  setSearchQuery('')
-                  updateURL({ search: '', enabled_filters: '', from: '0' })
-                }}
-                style={{ 
-                  fontSize: '14px', 
-                  color: '#dc2626',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  padding: 0
-                }}
-              >
-                Clear All
-              </button>
+              <button style={{ 
+                fontSize: '14px', 
+                color: '#dc2626',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: 0
+              }}>Clear All</button>
               {isMobile && (
                 <button
                   onClick={() => setShowMobileFilter(false)}
@@ -361,12 +246,10 @@ export default function ProductsPage() {
             
             {/* Filter Categories */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-              {filterCategories.map((category) => {
-                const isActive = activeFilter === category.param || enabledFilters.includes(category.param)
-                return (
+              {filterCategories.map((category) => (
                   <button
-                    key={category.param}
-                    onClick={() => handleFilterClick(category.param)}
+                    key={category}
+                    onClick={() => setActiveFilter(category)}
                     style={{
                       width: '100%',
                       textAlign: 'left',
@@ -374,33 +257,32 @@ export default function ProductsPage() {
                       border: 'none',
                       borderBottom: '1px solid #e0e0e0',
                       cursor: 'pointer',
-                      backgroundColor: isActive ? '#000' : '#fff',
-                      color: isActive ? '#fff' : '#000',
-                      fontWeight: isActive ? '500' : '400',
+                      backgroundColor: activeFilter === category ? '#000' : '#fff',
+                      color: activeFilter === category ? '#fff' : '#000',
+                      fontWeight: activeFilter === category ? '500' : '400',
                       fontSize: isMobile ? '14px' : '15px',
                       transition: 'all 0.2s'
                     }}
                     onMouseEnter={(e) => {
-                      if (!isActive) {
+                      if (activeFilter !== category) {
                         e.target.style.backgroundColor = '#f5f5f5'
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (!isActive) {
+                      if (activeFilter !== category) {
                         e.target.style.backgroundColor = '#fff'
                       }
                     }}
                   >
-                    {category.name}
+                    {category}
                   </button>
-                )
-              })}
+                ))}
             </div>
           </div>
         </aside>
 
         {/* Right Panel - Shows when category is selected */}
-        {activeFilter && activeFilter !== 'Refine Search' && (
+        {activeFilter && (
           <div style={{
             width: '280px',
             backgroundColor: '#fff',
@@ -415,31 +297,19 @@ export default function ProductsPage() {
               justifyContent: 'space-between', 
               marginBottom: '16px' 
             }}>
-              <h3 style={{ fontWeight: '600', fontSize: '18px' }}>
-                {filterCategories.find(f => f.param === activeFilter)?.name || activeFilter}
-              </h3>
-              <button 
-                onClick={() => {
-                  const newFilters = { ...appliedFilters }
-                  delete newFilters[activeFilter]
-                  setAppliedFilters(newFilters)
-                  updateURL()
-                }}
-                style={{ 
-                  fontSize: '14px', 
-                  color: '#dc2626',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textDecoration: 'underline'
-                }}
-              >
-                Clear
-              </button>
+              <h3 style={{ fontWeight: '600', fontSize: '18px' }}>{activeFilter}</h3>
+              <button style={{ 
+                fontSize: '14px', 
+                color: '#dc2626',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}>Clear</button>
             </div>
             
-            {/* Filter content based on type */}
-            {activeFilter === 'categories' ? (
+            {/* Category specific content */}
+            {activeFilter === 'Categories' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Category</label>
@@ -457,8 +327,57 @@ export default function ProductsPage() {
                     <option value="flanges">Flanges and Hangers</option>
                   </select>
                 </div>
+                
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Subcategory</label>
+                  <select style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #e0e0e0',
+                    borderRadius: '4px',
+                    backgroundColor: '#fff',
+                    fontSize: '14px'
+                  }}>
+                    <option value="">Select Subcategory</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Part name</label>
+                  <div style={{ position: 'relative' }}>
+                    <svg 
+                      width="16" 
+                      height="16" 
+                      fill="none" 
+                      stroke="#999" 
+                      viewBox="0 0 24 24"
+                      style={{
+                        position: 'absolute',
+                        left: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)'
+                      }}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search here"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px 8px 35px',
+                        border: '1px solid #e0e0e0',
+                        borderRadius: '4px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-            ) : activeFilter === 'refine_search' ? (
+            )}
+            
+            {/* Default search box for other filters */}
+            {activeFilter !== 'Categories' && (
               <div style={{ position: 'relative' }}>
                 <svg 
                   width="16" 
@@ -479,7 +398,6 @@ export default function ProductsPage() {
                   type="text"
                   value={filterSearch}
                   onChange={(e) => setFilterSearch(e.target.value)}
-                  onKeyPress={handleRefineSearch}
                   placeholder="Type here..."
                   style={{
                     width: '100%',
@@ -491,57 +409,6 @@ export default function ProductsPage() {
                   }}
                 />
               </div>
-            ) : (
-              <div>
-                {/* Show filter options based on activeFilter */}
-                {filterOptions[activeFilter] && filterOptions[activeFilter].length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {filterOptions[activeFilter].map((option, idx) => (
-                      <label key={idx} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '8px',
-                        cursor: 'pointer',
-                        borderRadius: '4px',
-                        transition: 'background-color 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={appliedFilters[activeFilter] === option.value}
-                          onChange={(e) => {
-                            const newFilters = { ...appliedFilters }
-                            if (e.target.checked) {
-                              newFilters[activeFilter] = option.value
-                            } else {
-                              delete newFilters[activeFilter]
-                            }
-                            setAppliedFilters(newFilters)
-                            updateURL({
-                              [activeFilter]: e.target.checked ? option.value : '',
-                              from: '0'
-                            })
-                          }}
-                          style={{ cursor: 'pointer' }}
-                        />
-                        <span style={{ flex: 1 }}>{option.value}</span>
-                        <span style={{ fontSize: '12px', color: '#666' }}>({option.count})</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : enabledFilters.includes(activeFilter) ? (
-                  <p style={{ color: '#666', fontSize: '14px' }}>
-                    Loading filter options...
-                  </p>
-                ) : (
-                  <p style={{ color: '#666', fontSize: '14px' }}>
-                    No filter options available
-                  </p>
-                )}
-              </div>
             )}
           </div>
         )}
@@ -551,8 +418,7 @@ export default function ProductsPage() {
       <main style={{ 
         flex: 1, 
         padding: isMobile ? '16px' : '24px', 
-        backgroundColor: '#fff',
-        marginLeft: isMobile ? 0 : (activeFilter && activeFilter !== 'Refine Search' ? '560px' : '280px')
+        backgroundColor: '#fff'
       }}>
           <div style={{ 
             display: 'flex', 
@@ -563,88 +429,16 @@ export default function ProductsPage() {
             borderBottom: '1px solid #e0e0e0'
           }}>
             <h1 style={{ fontSize: '20px', fontWeight: '600' }}>Result: {totalResults}</h1>
-            <button 
-              onClick={() => {
-                setAppliedFilters({})
-                setEnabledFilters([])
-                setSearchQuery('')
-                updateURL({ search: '', enabled_filters: '', from: '0' })
-              }}
-              style={{ 
-                color: '#dc2626',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                textDecoration: 'underline',
-                fontSize: '14px'
-              }}
-            >
-              Clear All
-            </button>
+            <button style={{ 
+              color: '#dc2626',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              fontSize: '14px'
+            }}>Clear All</button>
           </div>
 
-          {/* Active filters display */}
-          {(searchQuery || enabledFilters.length > 0) && (
-            <div style={{ marginBottom: '20px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {searchQuery && (
-                <span style={{
-                  padding: '4px 12px',
-                  backgroundColor: '#e0e0e0',
-                  borderRadius: '16px',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  Search: {searchQuery}
-                  <button
-                    onClick={() => {
-                      setSearchQuery('')
-                      updateURL({ search: '' })
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '16px',
-                      lineHeight: '1'
-                    }}
-                  >
-                    ×
-                  </button>
-                </span>
-              )}
-              {enabledFilters.map(filter => (
-                <span key={filter} style={{
-                  padding: '4px 12px',
-                  backgroundColor: '#e0e0e0',
-                  borderRadius: '16px',
-                  fontSize: '14px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  {filterCategories.find(f => f.param === filter)?.name || filter}
-                  <button
-                    onClick={() => {
-                      const newFilters = enabledFilters.filter(f => f !== filter)
-                      setEnabledFilters(newFilters)
-                      updateURL({ enabled_filters: newFilters.join(',') })
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '16px',
-                      lineHeight: '1'
-                    }}
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
 
           {loading ? (
             <div style={{ 
@@ -764,7 +558,7 @@ export default function ProductsPage() {
                       <div style={{ marginTop: '12px' }}>
                         <span style={{
                           fontWeight: '500',
-                          color: product.availability || product.inStock !== false ? '#10b981' : '#ef4444'
+                          color: product.inStock ? '#10b981' : '#ef4444'
                         }}>
                           {product.availability || product.inStock !== false ? 'In stock' : 'Out of stock'}
                         </span>
@@ -796,7 +590,10 @@ export default function ProductsPage() {
               borderTop: '1px solid #e0e0e0'
             }}>
               <button
-                onClick={() => handlePageChange(Math.max(0, currentPage - 1))}
+                onClick={() => {
+                  const newPage = Math.max(0, currentPage - 1)
+                  updateURL({ page: newPage.toString() })
+                }}
                 disabled={currentPage === 0}
                 style={{
                   padding: '8px 16px',
@@ -815,7 +612,10 @@ export default function ProductsPage() {
               </span>
               
               <button
-                onClick={() => handlePageChange(currentPage + 1)}
+                onClick={() => {
+                  const newPage = currentPage + 1
+                  updateURL({ page: newPage.toString() })
+                }}
                 disabled={(currentPage + 1) * pageSize >= totalResults}
                 style={{
                   padding: '8px 16px',

@@ -27,6 +27,7 @@ export async function GET(request) {
     }
     
     // Add any additional parameters from the original request
+    // This includes enabled_filters, brand_name, etc.
     searchParams.forEach((value, key) => {
       if (!['refine_search', 'search', 'hitsSize', 'size', 'from', 'offset'].includes(key)) {
         queryParams.set(key, value)
