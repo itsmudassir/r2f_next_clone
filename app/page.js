@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import SearchAutocomplete from '@/components/SearchAutocomplete'
+import SearchAutocomplete from '../components/SearchAutocomplete'
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('')

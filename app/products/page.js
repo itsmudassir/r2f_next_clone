@@ -2,13 +2,20 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 
 export default function ProductsPage() {
-  const [searchQuery, setSearchQuery] = useState('')
+  const searchParams = useSearchParams()
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
   const [activeFilter, setActiveFilter] = useState('Refine Search')
   const [filterSearch, setFilterSearch] = useState('')
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileFilter, setShowMobileFilter] = useState(false)
+  const [products, setProducts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [totalResults, setTotalResults] = useState(0)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [pageSize] = useState(20)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -32,39 +39,58 @@ export default function ProductsPage() {
     'Vehicle Application'
   ]
 
-  const products = [
-    {
-      id: 'V3013107',
-      title: 'BRAKE PADS BRAKE PADS',
-      brand: 'CHRYSLER',
-      price: '102.49',
-      inStock: true,
-      rating: 0,
-      reviews: 0,
-      store: 'FinditParts'
-    },
-    {
-      id: 'V3012926',
-      title: 'BRAKE PADS BRAKE PADS',
-      brand: 'CHRYSLER',
-      price: '124.99',
-      inStock: true,
-      rating: 0,
-      reviews: 0,
-      store: 'FinditParts'
-    },
-    {
-      id: 'D30',
-      title: 'BrakeBest Brake Pads Organic Brake Pads',
-      brand: 'BrakeBest Brake Pads',
-      price: '30.99',
-      inStock: true,
-      rating: 0,
-      reviews: 0,
-      store: 'Oreilly',
-      categories: ['Brake', 'Brake Hydraulics', 'Disc Brake Caliper Set']
+  // Fetch products from API
+  const fetchProducts = async (search = '', page = 0) => {
+    setLoading(true)
+    try {
+      const url = search 
+        ? `/api/search?refine_search=${encodeURIComponent(search)}&hitsSize=${pageSize}&from=${page * pageSize}`
+        : `/api/search?hitsSize=${pageSize}&from=${page * pageSize}`
+      
+      const response = await fetch(url)
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        // Extract products from the API response - RIGHT2FIX uses hits.hits structure
+        let productData = []
+        if (result.data.hits?.hits) {
+          productData = result.data.hits.hits.map(hit => ({
+            _id: hit._id,
+            ...hit._source?.detail_single,
+            images: hit._source?.images || [],
+            stores: hit._source?.stores || []
+          }))
+        } else {
+          productData = result.data.products || result.data.items || []
+        }
+        setProducts(productData)
+        setTotalResults(result.data.hits?.total?.value || result.data.total || result.pagination?.total || productData.length)
+      } else {
+        setProducts([])
+        setTotalResults(0)
+      }
+    } catch (error) {
+      console.error('Error fetching products:', error)
+      setProducts([])
+      setTotalResults(0)
+    } finally {
+      setLoading(false)
     }
-  ]
+  }
+
+  // Fetch products on mount and when search changes
+  useEffect(() => {
+    const search = searchParams.get('search') || searchQuery
+    fetchProducts(search, currentPage)
+  }, [searchParams, currentPage])
+
+  // Handle search
+  const handleSearch = (e) => {
+    if (e.key === 'Enter') {
+      fetchProducts(searchQuery, 0)
+      setCurrentPage(0)
+    }
+  }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -119,6 +145,7 @@ export default function ProductsPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={handleSearch}
                 placeholder="Search"
                 style={{
                   width: '100%',
@@ -404,7 +431,7 @@ export default function ProductsPage() {
             paddingBottom: '16px',
             borderBottom: '1px solid #e0e0e0'
           }}>
-            <h1 style={{ fontSize: '20px', fontWeight: '600' }}>Result: 10000</h1>
+            <h1 style={{ fontSize: '20px', fontWeight: '600' }}>Result: {totalResults}</h1>
             <button style={{ 
               color: '#dc2626',
               background: 'none',
@@ -416,19 +443,57 @@ export default function ProductsPage() {
           </div>
 
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {products.map((product) => (
-              <div key={product.id} style={{
-                backgroundColor: '#fff',
-                border: '1px solid #e5e7eb',
-                borderRadius: '8px',
-                padding: isMobile ? '12px' : '16px',
-                transition: 'box-shadow 0.3s',
-                cursor: 'pointer'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
-              >
+          {loading ? (
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              minHeight: '300px' 
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  border: '3px solid #f0f0f0',
+                  borderTopColor: '#000',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                  margin: '0 auto 16px'
+                }} />
+                <p>Loading products...</p>
+              </div>
+            </div>
+          ) : products.length === 0 ? (
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '60px 20px',
+              color: '#666'
+            }}>
+              <h2 style={{ fontSize: '24px', marginBottom: '16px' }}>No products found</h2>
+              <p>Try adjusting your search or filters</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {products.map((product, index) => {
+                const productId = product._id || product.id_codes || product.id || product.sku || index;
+                return (
+                <Link 
+                  key={productId}
+                  href={`/product/${productId}`}
+                  style={{
+                    display: 'block',
+                    backgroundColor: '#fff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    padding: isMobile ? '12px' : '16px',
+                    transition: 'box-shadow 0.3s',
+                    cursor: 'pointer',
+                    textDecoration: 'none',
+                    color: 'inherit'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)'}
+                  onMouseLeave={(e) => e.currentTarget.style.boxShadow = 'none'}
+                >
                 <div style={{ display: 'flex', gap: isMobile ? '12px' : '16px', flexDirection: isMobile ? 'column' : 'row' }}>
                   <div style={{
                     width: isMobile ? '100%' : '192px',
@@ -440,28 +505,49 @@ export default function ProductsPage() {
                     justifyContent: 'center',
                     flexShrink: 0
                   }}>
-                    <span style={{ color: '#9ca3af' }}>Product Image</span>
+                    {product.images?.[0] ? (
+                      <img 
+                        src={product.images[0]} 
+                        alt={product.title || 'Product'}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'contain'
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none'
+                          e.target.parentElement.innerHTML = '<span style="color: #9ca3af">Product Image</span>'
+                        }}
+                      />
+                    ) : (
+                      <span style={{ color: '#9ca3af' }}>Product Image</span>
+                    )}
                   </div>
                   
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ fontWeight: 'bold', fontSize: '18px' }}>{product.id}</h3>
-                    <p style={{ fontWeight: '600', marginTop: '4px' }}>{product.brand}</p>
+                    <h3 style={{ fontWeight: 'bold', fontSize: '18px' }}>
+                      {product.mpn || product.id || product.sku || product.part_number || `Item ${index + 1}`}
+                    </h3>
+                    <p style={{ fontWeight: '600', marginTop: '4px' }}>
+                      {product.brand_name || product.brand || product.manufacturer || 'Unknown Brand'}
+                    </p>
                     
                     <div style={{ marginTop: '8px', fontSize: '14px' }}>
                       <p style={{ marginBottom: '4px' }}>
-                        <span style={{ color: '#6b7280' }}>Title:</span> {product.title}
+                        <span style={{ color: '#6b7280' }}>Title:</span> {product.title || product.name || product.description || 'No title'}
                       </p>
-                      {product.categories && (
+                      {(product.categories || product.category) && (
                         <p style={{ marginBottom: '4px' }}>
-                          <span style={{ color: '#6b7280' }}>Categories:</span> {product.categories.join(' > ')}
+                          <span style={{ color: '#6b7280' }}>Categories:</span> 
+                          {Array.isArray(product.categories) ? product.categories.join(' > ') : (product.category || product.categories)}
                         </p>
                       )}
                       <p style={{ marginBottom: '4px' }}>
-                        <span style={{ color: '#6b7280' }}>Stores:</span> {product.store}
+                        <span style={{ color: '#6b7280' }}>Stores:</span> {product.store || product.vendor || 'Multiple stores'}
                       </p>
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-                        <span style={{ fontWeight: '600' }}>{product.rating.toFixed(1)}</span>
+                        <span style={{ fontWeight: '600' }}>{(product.avg_of_avg_ratings || product.rating || 0).toFixed(1)}</span>
                         <div style={{ display: 'flex' }}>
                           {[...Array(5)].map((_, i) => (
                             <svg key={i} style={{ width: '16px', height: '16px', color: '#d1d5db' }} fill="currentColor" viewBox="0 0 20 20">
@@ -469,7 +555,7 @@ export default function ProductsPage() {
                             </svg>
                           ))}
                         </div>
-                        <span style={{ color: '#6b7280' }}>({product.reviews} reviews)</span>
+                        <span style={{ color: '#6b7280' }}>({product.sum_reviews || product.reviews || 0} reviews)</span>
                       </div>
                       
                       <div style={{ marginTop: '12px' }}>
@@ -477,23 +563,86 @@ export default function ProductsPage() {
                           fontWeight: '500',
                           color: product.inStock ? '#10b981' : '#ef4444'
                         }}>
-                          {product.inStock ? 'In stock' : 'Out of stock'}
+                          {product.availability || product.inStock !== false ? 'In stock' : 'Out of stock'}
                         </span>
                         <p style={{
                           fontSize: '24px',
                           fontWeight: 'bold',
                           color: '#ef4444',
                           marginTop: '4px'
-                        }}>${product.price}</p>
+                        }}>${product.min_price || product.price || product.cost || '0.00'}</p>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              </Link>
+              );
+              })}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {!loading && totalResults > pageSize && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: '16px',
+              marginTop: '40px',
+              paddingTop: '20px',
+              borderTop: '1px solid #e0e0e0'
+            }}>
+              <button
+                onClick={() => {
+                  const newPage = Math.max(0, currentPage - 1)
+                  setCurrentPage(newPage)
+                  fetchProducts(searchQuery, newPage)
+                }}
+                disabled={currentPage === 0}
+                style={{
+                  padding: '8px 16px',
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '4px',
+                  backgroundColor: currentPage === 0 ? '#f5f5f5' : '#fff',
+                  cursor: currentPage === 0 ? 'not-allowed' : 'pointer',
+                  opacity: currentPage === 0 ? 0.5 : 1
+                }}
+              >
+                Previous
+              </button>
+              
+              <span style={{ fontSize: '14px', color: '#666' }}>
+                Page {currentPage + 1} of {Math.ceil(totalResults / pageSize)}
+              </span>
+              
+              <button
+                onClick={() => {
+                  const newPage = currentPage + 1
+                  setCurrentPage(newPage)
+                  fetchProducts(searchQuery, newPage)
+                }}
+                disabled={(currentPage + 1) * pageSize >= totalResults}
+                style={{
+                  padding: '8px 16px',
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '4px',
+                  backgroundColor: (currentPage + 1) * pageSize >= totalResults ? '#f5f5f5' : '#fff',
+                  cursor: (currentPage + 1) * pageSize >= totalResults ? 'not-allowed' : 'pointer',
+                  opacity: (currentPage + 1) * pageSize >= totalResults ? 0.5 : 1
+                }}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </main>
       </div>
+      
+      <style jsx>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }
