@@ -21,9 +21,11 @@
 - **URL**: `https://right2fixapps.com/search_pg_one`
 - **Method**: GET
 - **Parameters**:
-  - `hitsSize`: 20 (items per page)
-  - `from`: 0 (pagination offset)
+  - `hitsSize`: Number of items per page (default: 20)
+  - `from`: Pagination offset (0, 20, 40, etc.)
+  - `refine_search`: Search query (optional)
 - **Purpose**: Main product search/listing
+- **Note**: URL has empty parameter before hitsSize when no search: `?&hitsSize=20&from=0`
 
 #### Elasticsearch Multi-Get
 - **URL**: `https://right2fix.com/elasticsearch/mget`
@@ -42,7 +44,7 @@
   - `search`: search query (e.g., "brake pads")
 - **Purpose**: Returns search suggestions while typing
 
-### 4. Search Results API
+### 4. Search Results API (same as Search Page One)
 - **URL**: `https://right2fixapps.com/search_pg_one`
 - **Method**: GET
 - **Parameters**:
@@ -50,6 +52,9 @@
   - `hitsSize`: 20 (items per page)
   - `from`: 0 (pagination offset)
 - **Purpose**: Returns search results with refinement
+- **Examples**:
+  - Initial load: `?&hitsSize=20&from=0`
+  - With search: `?refine_search=brake%20pads&hitsSize=20&from=0`
 
 ## API Analysis
 
@@ -88,6 +93,17 @@ Based on the UI, filters include:
 - Sort options
 - Price ranges
 
+### 3. Search/Products API (`/api/search`)
+- **File**: `app/api/search/route.js`
+- **RIGHT2FIX Endpoint**: `https://right2fixapps.com/search_pg_one`
+- **Features**:
+  - Complete search_pg_one implementation
+  - Parameters: hitsSize, from, refine_search
+  - Handles empty parameter in URL for non-search queries
+  - Pagination support
+  - POST method for compatibility
+  - Normalized response with pagination info
+
 ## Implementation Notes for Clone:
 1. Create proxy endpoints in Next.js to call RIGHT2FIX APIs
 2. Implement caching to reduce API calls
@@ -98,6 +114,7 @@ Based on the UI, filters include:
 
 ### 1. Search Completion API (`/api/autocomplete`)
 - **File**: `app/api/autocomplete/route.js`
+- **RIGHT2FIX Endpoint**: `https://right2fixapps.com/search_completion?search={query}`
 - **Features**:
   - Full request headers for proper API communication
   - Handles multiple response formats (JSON, text, array)
@@ -108,13 +125,15 @@ Based on the UI, filters include:
 
 ### 2. Interchanges API (`/api/interchanges`)
 - **File**: `app/api/interchanges/route.js`
+- **RIGHT2FIX Endpoint**: `https://right2fixapps.com/search_pg_three?req_type=intpage&id_codes={id}&dummy=no`
 - **Features**:
   - Complete search_pg_three implementation
-  - Required parameters: req_type, id_codes, dummy
+  - Required parameters: req_type=intpage, id_codes (numeric), dummy=no
   - Pagination support with page/limit
   - Handles JSON and HTML responses
   - POST method for compatibility
   - Normalized data structure
+  - Note: id_codes must be numeric product ID, not URLs
 
 ### 3. Components:
 - **SearchAutocomplete** (`components/SearchAutocomplete.js`)
