@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import SearchAutocomplete from '@/components/SearchAutocomplete'
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -16,10 +17,9 @@ export default function Home() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    if (searchQuery) {
-      window.location.href = `/products?search=${encodeURIComponent(searchQuery)}`
+  const handleSearch = (query) => {
+    if (query) {
+      window.location.href = `/products?search=${encodeURIComponent(query)}`
     }
   }
 
@@ -61,40 +61,11 @@ export default function Home() {
         </div>
 
         {/* Search Bar */}
-        <form onSubmit={handleSearch} style={{ width: '100%', maxWidth: isMobile ? '90%' : '600px', marginBottom: isMobile ? '20px' : '30px' }}>
-          <div style={{ position: 'relative' }}>
-            <svg 
-              width="20" 
-              height="20" 
-              fill="none" 
-              stroke="#999" 
-              viewBox="0 0 24 24"
-              style={{
-                position: 'absolute',
-                left: '15px',
-                top: '50%',
-                transform: 'translateY(-50%)'
-              }}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by part number, brand, description or barcode"
-              style={{
-                width: '100%',
-                padding: isMobile ? '10px 16px 10px 40px' : '12px 20px 12px 45px',
-                fontSize: isMobile ? '16px' : '14px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                outline: 'none',
-                fontFamily: 'system-ui, -apple-system, sans-serif'
-              }}
-            />
-          </div>
-        </form>
+        <div style={{ width: '100%', maxWidth: isMobile ? '90%' : '600px', marginBottom: isMobile ? '20px' : '30px' }}>
+          <SearchAutocomplete 
+            onSearch={handleSearch}
+          />
+        </div>
 
         {/* Tagline */}
         <p style={{ 
