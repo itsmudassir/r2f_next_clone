@@ -19,10 +19,13 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('from') || '0') / 20)
   const [pageSize] = useState(20)
   const [enabledFilters, setEnabledFilters] = useState(
-    searchParams.get('enabled_filters')?.split(',').filter(Boolean) || []
+    searchParams.get('enabled_filters')?.split('---').filter(Boolean) || []
   )
   const [appliedFilters, setAppliedFilters] = useState({})
   const [filterOptions, setFilterOptions] = useState({})
+  const [enabledRanges, setEnabledRanges] = useState(
+    searchParams.get('enabled_ranges')?.split('---').filter(Boolean) || []
+  )
 
   useEffect(() => {
     const checkMobile = () => {
@@ -36,7 +39,7 @@ export default function ProductsPage() {
   const filterCategories = [
     { name: 'Availability', param: 'availability' },
     { name: 'Brands', param: 'brand_name' },
-    { name: 'Categories', param: 'categories' },
+    { name: 'Categories', param: 'part_name' },
     { name: 'Refine Search', param: 'refine_search' },
     { name: 'Ratings', param: 'ratings' },
     { name: 'Reviews', param: 'reviews' },
@@ -57,13 +60,23 @@ export default function ProductsPage() {
     
     // Add enabled filters
     if (enabledFilters.length > 0) {
-      params.set('enabled_filters', enabledFilters.join(','))
+      params.set('enabled_filters', enabledFilters.join('---'))
     }
     
-    // Add applied filters (e.g., brand_name=dorman)
+    // Add enabled ranges
+    if (enabledRanges.length > 0) {
+      params.set('enabled_ranges', enabledRanges.join('---'))
+    }
+    
+    // Add applied filters with CONCSTT suffix for certain filters
     Object.entries(appliedFilters).forEach(([key, value]) => {
       if (value) {
-        params.set(key, value)
+        // Add CONCSTT suffix for availability and brand filters
+        if (['availability', 'brand_name', 'stores'].includes(key)) {
+          params.set(key, value + 'CONCSTT')
+        } else {
+          params.set(key, value)
+        }
       }
     })
     
@@ -135,7 +148,8 @@ export default function ProductsPage() {
     const state = {
       search: searchQuery,
       FilterNav: activeFilter,
-      enabled_filters: enabledFilters.join(','),
+      enabled_filters: enabledFilters.join('---'),
+      enabled_ranges: enabledRanges.join('---'),
       from: (currentPage * pageSize).toString(),
       ...appliedFilters,
       ...updates
@@ -156,16 +170,18 @@ export default function ProductsPage() {
     const search = searchParams.get('search') || searchParams.get('refine_search') || ''
     const filterNav = searchParams.get('FilterNav') || 'Refine Search'
     const from = parseInt(searchParams.get('from') || '0')
-    const enabled = searchParams.get('enabled_filters')?.split(',').filter(Boolean) || []
+    const enabled = searchParams.get('enabled_filters')?.split('---').filter(Boolean) || []
+    const ranges = searchParams.get('enabled_ranges')?.split('---').filter(Boolean) || []
     
     setSearchQuery(search)
     setActiveFilter(filterNav)
     setCurrentPage(Math.floor(from / pageSize))
     setEnabledFilters(enabled)
+    setEnabledRanges(ranges)
     
     // Extract applied filters from URL
     const filters = {}
-    const filterParams = ['brand_name', 'stores', 'availability', 'categories', 'ratings', 'reviews', 'price', 'attributes']
+    const filterParams = ['brand_name', 'stores', 'availability', 'part_name', 'ratings_ranges', 'reviews_ranges', 'price_ranges', 'attributes', 'year']
     searchParams.forEach((value, key) => {
       if (filterParams.includes(key)) {
         filters[key] = value
@@ -177,7 +193,7 @@ export default function ProductsPage() {
   // Fetch products when parameters change
   useEffect(() => {
     fetchProducts()
-  }, [searchQuery, enabledFilters, appliedFilters, currentPage])
+  }, [searchQuery, enabledFilters, enabledRanges, appliedFilters, currentPage])
 
   // Handle filter category click
   const handleFilterClick = (filterParam) => {
@@ -189,10 +205,22 @@ export default function ProductsPage() {
         ? enabledFilters.filter(f => f !== filterParam)
         : [...enabledFilters, filterParam]
       
+      // Add to enabled_ranges for certain filters
+      let newEnabledRanges = [...enabledRanges]
+      if (['brand_name', 'part_name', 'ratings_ranges', 'reviews_ranges', 'price_ranges', 'stores'].includes(filterParam)) {
+        if (enabledFilters.includes(filterParam)) {
+          newEnabledRanges = newEnabledRanges.filter(r => r !== filterParam)
+        } else {
+          newEnabledRanges.push(filterParam)
+        }
+      }
+      
       setEnabledFilters(newEnabledFilters)
+      setEnabledRanges(newEnabledRanges)
       updateURL({ 
         FilterNav: filterParam,
-        enabled_filters: newEnabledFilters.join(','),
+        enabled_filters: newEnabledFilters.join('---'),
+        enabled_ranges: newEnabledRanges.join('---'),
         from: '0' // Reset pagination
       })
     } else {
@@ -458,6 +486,42 @@ export default function ProductsPage() {
                   </select>
                 </div>
               </div>
+            ) : activeFilter === 'part_name' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Category</label>
+                  <select 
+                    value={appliedFilters.part_name || ''}
+                    onChange={(e) => {
+                      const newFilters = { ...appliedFilters }
+                      if (e.target.value) {
+                        newFilters.part_name = e.target.value
+                      } else {
+                        delete newFilters.part_name
+                      }
+                      setAppliedFilters(newFilters)
+                      updateURL({
+                        part_name: e.target.value,
+                        from: '0'
+                      })
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #e0e0e0',
+                      borderRadius: '4px',
+                      backgroundColor: '#fff',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="">Select Category</option>
+                    <option value="Bumper Cover Air Duct">Bumper Cover Air Duct</option>
+                    <option value="Oil, Fluids and Chemicals">Oil, Fluids and Chemicals</option>
+                    <option value="Body & Brackets">Body & Brackets</option>
+                    <option value="Flanges and Hangers">Flanges and Hangers</option>
+                  </select>
+                </div>
+              </div>
             ) : activeFilter === 'refine_search' ? (
               <div style={{ position: 'relative' }}>
                 <svg 
@@ -515,13 +579,15 @@ export default function ProductsPage() {
                           onChange={(e) => {
                             const newFilters = { ...appliedFilters }
                             if (e.target.checked) {
-                              newFilters[activeFilter] = option.value
+                              // Remove CONCSTT suffix if it exists when storing internally
+                              const cleanValue = option.value.replace('CONCSTT', '')
+                              newFilters[activeFilter] = cleanValue
                             } else {
                               delete newFilters[activeFilter]
                             }
                             setAppliedFilters(newFilters)
                             updateURL({
-                              [activeFilter]: e.target.checked ? option.value : '',
+                              [activeFilter]: e.target.checked ? option.value.replace('CONCSTT', '') : '',
                               from: '0'
                             })
                           }}
@@ -628,8 +694,13 @@ export default function ProductsPage() {
                   <button
                     onClick={() => {
                       const newFilters = enabledFilters.filter(f => f !== filter)
+                      const newRanges = enabledRanges.filter(r => r !== filter)
                       setEnabledFilters(newFilters)
-                      updateURL({ enabled_filters: newFilters.join(',') })
+                      setEnabledRanges(newRanges)
+                      updateURL({ 
+                        enabled_filters: newFilters.join('---'),
+                        enabled_ranges: newRanges.join('---')
+                      })
                     }}
                     style={{
                       background: 'none',
